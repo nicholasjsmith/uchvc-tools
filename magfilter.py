@@ -1,5 +1,20 @@
 #! /usr/local/bin/python3
 # -*- coding: utf-8 -*-
+"""
+Apply the CMD filter, find the distance, smooth the distribution, and find the overdensity!
+
+Adding comments in as I go along to make this more accessible - njs3
+
+Future Changes: Change error cut to reflect the differences between daophot error and aperture error
+		Add more information into the files created (like what they are!!!!!)
+		More tbd
+
+5-22-19: fixing break issues between daophot photometry and aperture (the lack of fwhm)
+	 created a bogus fwhm array for daophot photometry
+	 adding a flag for flipping between aperture and daophot
+
+5-21-19: Swtiching photometry error cut back to 0.2, per Bill's original routine
+"""
 import os, sys, getopt, warnings
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,6 +33,8 @@ try :
     from scipy import ndimage
 except ImportError :
     print('bad import')
+
+daophot = True #set to True for daophot photometry for loading in the data file and setting fwhm values since they are not included
 
 def downloadSDSSgal(img1, img2):
     formats = ['csv','xml','html']
@@ -645,17 +662,24 @@ def magfilter(fwhm, fwhm_string, dm, dm_string, filter_file, filter_string, dm2=
 
     # set up some filenames
     # mag_file = 'calibrated_mags.dat'
-    mag_file = "AGC249525_daophot.dat.cut"
+    mag_file = "AGC249525_phot.dat.20190220"
 
     # read in magnitudes, colors, and positions(x,y)
     # gxr,gyr,g_magr,g_ierrr,ixr,iyr,i_magr,i_ierrr,gmir,fwhm_sr= np.loadtxt(mag_file,usecols=(0,1,2,3,4,5,6,7,8,11),unpack=True)
     # gxr,gyr,g_magr,g_ierrr,ixr,iyr,i_magr,i_ierrr,gmir= np.loadtxt(mag_file,usecols=(0,1,2,3,4,5,6,7,8),unpack=True)
-    idr,rar,decr,ixr,iyr,am_g,g_ir,g_ierrr,am_i,i_ir,i_ierrr,g_magr,i_magr,gmir,chi,sharp,ebv,gfwhmr,fwhm_sr = np.loadtxt(mag_file,usecols=(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18),unpack=True)
+    if daophot == True:
+        mag_file = "AGC249525_phot.dat.20190220"
+    	idr,rar,decr,ixr,iyr,am_g,g_ir,g_ierrr,am_i,i_ir,i_ierrr,g_magr,i_magr,gmir,chi,sharp,ebv = np.loadtxt(mag_file,usecols=(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16),unpack=True)
+        fwhm_sr = np.zeros(len(idr)) #create a bogus array to prevent breaking in later parts
+    else:
+        mag_file = 'calibrated_mags.dat'
+	gxr,gyr,g_magr,g_ierrr,ixr,iyr,i_magr,i_ierrr,gmir= np.loadtxt(mag_file,usecols=(0,1,2,3,4,5,6,7,8),unpack=True)
+        fwhm_sr = np.ones_like(gxr)
     gxr, gyr = ixr, iyr
     # print len(gxr), "total stars"
     # fwhm_sr = np.ones_like(gxr)
     # filter out the things with crappy color errors
-    mag_error_cut = 0.99
+    mag_error_cut = 0.2 #Limit on the error for the filter; Originally set at 0.2
     color_error_cut = np.sqrt(2.0)*mag_error_cut
     
     
@@ -799,7 +823,7 @@ def magfilter(fwhm, fwhm_string, dm, dm_string, filter_file, filter_string, dm2=
         i_decd_f = [i_decd[i] for i in range(len(i_mag)) if (stars_f[i])]
         i_x_f = [ix[i] for i in range(len(i_mag)) if (stars_f[i])]
         i_y_f = [iy[i] for i in range(len(i_mag)) if (stars_f[i])]
-        fwhm_sf = [fwhm_s[i] for i in range(len(i_mag)) if (stars_f[i])]
+        #fwhm_sf = [fwhm_s[i] for i in range(len(i_mag)) if (stars_f[i])]
         n_in_filter = len(i_mag_f)
         
         # xedgesg, x_centg, yedgesg, y_centg, Sg, x_cent_Sg, y_cent_Sg, pltsigg, tblg = galaxyMap(fits_file_i, fwhm, dm, filter_file)
@@ -837,7 +861,7 @@ def magfilter(fwhm, fwhm_string, dm, dm_string, filter_file, filter_string, dm2=
         i_decd_c = [i_decd[i] for i in range(len(i_mag)) if (stars_circ[i])]
         i_x_c = [ix[i] for i in range(len(i_mag)) if (stars_circ[i])]
         i_y_c = [iy[i] for i in range(len(i_mag)) if (stars_circ[i])]
-        fwhm_sc = [fwhm_s[i] for i in range(len(i_mag)) if (stars_circ[i])]
+        #fwhm_sc = [fwhm_s[i] for i in range(len(i_mag)) if (stars_circ[i])]
         
         # make a random reference cmd to compare to
         if not os.path.isfile('refCircle.center'):
@@ -951,7 +975,7 @@ def magfilter(fwhm, fwhm_string, dm, dm_string, filter_file, filter_string, dm2=
 
         #iraf.imutil.hedit(images=fits_g, fields='PV*', delete='yes', verify='no')
         #iraf.imutil.hedit(images=fits_i, fields='PV*', delete='yes', verify='no') 
-        if pct > 97.:
+        if pct > 90.:
             with open(ds9_file,'w+') as ds9:
                 print("fk5;circle({:f},{:f},2') # color=yellow width=2 label=ref".format(ra_cr, dec_cr), file=ds9)
                 print("fk5;circle({:f},{:f},2') # color=magenta width=2 label=detection".format(ra_c, dec_c), file=ds9)
